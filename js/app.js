@@ -100,6 +100,7 @@
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(D)); }
     catch (e) { pulisci(true); try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e2) { toast('Memoria del telefono piena: esporta un backup'); } }
+    if (window.Ponte) Ponte.cambiato();
   }
   // tiene leggero l'archivio: assunzioni oltre 120 giorni, email scartate vecchie
   function pulisci(forte) {
@@ -292,7 +293,8 @@
     var d = parseYmd(e.data);
     return '<div class="item" data-act="apriEvento" data-id="' + e.id + '"><div class="date"><small>' + GG[d.getDay()] + '</small><b>' + d.getDate() + '</b><small>' + MM[d.getMonth()] + '</small></div>' +
       '<div class="bar" style="background:' + COL[e.tipo] + '"></div><div class="grow"><h3 class="ellipsis">' + esc(e.titolo || e.tipo) + '</h3><p class="ellipsis">' + (e.ora ? 'ore ' + e.ora + ' · ' : '') + esc(e.luogo || e.tipo) + '</p></div>' +
-      (e.fonte === 'email' ? '<span class="tag grey" title="Aggiunto da email">' + IC.mail.replace('<svg', '<svg style="width:13px;height:13px"') + '</span>' : '') + '</div>';
+      (e.fonte === 'email' ? '<span class="tag grey" title="Aggiunto da email">' + IC.mail.replace('<svg', '<svg style="width:13px;height:13px"') + '</span>' : '') +
+      (e.fonte === 'agendapp' ? '<span class="tag grey" title="Arrivato da AgendApp">AgendApp</span>' : '') + '</div>';
   }
   VIEWS.agenda = function (v) {
     var y = calMese.getFullYear(), m = calMese.getMonth();
@@ -330,7 +332,7 @@
     var c = contatto(e.contattoId);
     var dove = e.indirizzo || e.luogo || (c && c.indirizzo);
     var h = '<div class="row" style="margin-bottom:12px"><div class="ticon" style="background:' + COL[e.tipo] + '">' + IC[e.tipo] + '</div><div class="grow"><span class="tag" style="background:' + COL[e.tipo] + '22;color:' + COL[e.tipo] + '">' + e.tipo + '</span>' +
-      (e.fonte === 'email' ? ' <span class="tag grey">da email</span>' : '') + '<h3 style="margin-top:4px;text-transform:capitalize">' + fmtLunga(e.data) + (e.ora ? ' · ore ' + e.ora : '') + '</h3></div></div>';
+      (e.fonte === 'email' ? ' <span class="tag grey">da email</span>' : '') + (e.fonte === 'agendapp' ? ' <span class="tag grey">da AgendApp</span>' : '') + '<h3 style="margin-top:4px;text-transform:capitalize">' + fmtLunga(e.data) + (e.ora ? ' · ore ' + e.ora : '') + '</h3></div></div>';
     if (e.luogo || e.indirizzo) h += '<p style="margin:0 0 4px"><b>' + esc(e.luogo) + '</b>' + (e.indirizzo && e.indirizzo !== e.luogo ? '<br><span class="muted">' + esc(e.indirizzo) + '</span>' : '') + '</p>';
     h += '<div class="quick" style="margin:10px 0 14px">' + (dove ? '<a class="qa map" href="' + esc(mapsDir(dove)) + '" target="_blank" rel="noopener">' + IC.route + 'Percorso</a>' : '') + (c ? qaHtml({ tel: c.tel, whatsapp: c.whatsapp, email: c.email, tel2: c.tel2 }) : '') + '</div>';
     if (c) h += '<div class="found" data-act="apriContatto" data-id="' + c.id + '" style="cursor:pointer"><span class="small muted">Contatto</span><br><b>' + esc(c.nome) + '</b>' + (c.tel ? ' · ' + esc(c.tel) : '') + '</div>';
@@ -354,6 +356,7 @@
   });
   ACT.delEvento = function (el) {
     if (!confirm('Eliminare questo appuntamento?')) return;
+    var ev = evento(el.dataset.id); if (ev && ev.ponte && window.Ponte) Ponte.ignora(ev.ponte);
     D.eventi = D.eventi.filter(function (e) { return e.id !== el.dataset.id; }); save(); chiudiSheet(true); ridisegna(); toast('Appuntamento eliminato');
   };
   ACT.nuovoEvento = function (el) { formEvento({ data: el.dataset.g || ymd(new Date()) }); };
@@ -391,7 +394,7 @@
           id: e.id || uid(), tipo: tipo, titolo: f.get('titolo').trim() || tipo, data: f.get('data'), ora: f.get('ora'),
           luogo: f.get('luogo').trim(), indirizzo: f.get('indirizzo').trim(), contattoId: f.get('contattoId'), note: f.get('note').trim(),
           portare: $$('#portEv .chip.on', s).map(function (b) { return { t: b.dataset.p, ok: !!vecchi[b.dataset.p] }; }),
-          fonte: e.fonte || 'manuale', emailId: e.emailId || '', demo: e.demo || false, creato: e.creato || Date.now()
+          fonte: e.fonte || 'manuale', emailId: e.emailId || '', demo: e.demo || false, creato: e.creato || Date.now(), ponte: e.ponte || ''
         };
         if (nuovo) D.eventi.push(rec); else D.eventi = D.eventi.map(function (x) { return x.id === rec.id ? rec : x; });
         save(); chiudiSheet(); calSel = rec.data; var dd = parseYmd(rec.data); calMese = new Date(dd.getFullYear(), dd.getMonth(), 1);
@@ -1196,6 +1199,7 @@
       '<a href="#/email"><i style="background:var(--acc-l);color:var(--acc)">' + IC.mail + '</i><b>Email sanitarie</b><small>Lette e smistate per te</small>' + (n ? '<span class="dot">' + n + '</span>' : '') + '</a>' +
       '<a href="#/glossario"><i style="background:#fff3cf;color:#b07b00">' + IC.book + '</i><b>Cosa significa?</b><small>Glossario e database</small></a>' +
       '<a href="#/trasporti"><i style="background:var(--pri-l);color:var(--pri-d)">' + IC.van + '</i><b>Trasporto e aiuto</b><small>Ambulanze, associazioni</small></a>' +
+      '<a href="#" data-act="ponte"><i style="background:#e8ecfb;color:#14244a">' + IC.spark + '</i><b>Collega le app</b><small>' + (window.Ponte && Ponte.attivo() ? 'AgendApp e Smistino collegate' : 'AgendApp e Smistino') + '</small></a>' +
       '<a href="#/impostazioni"><i style="background:#e9efed;color:var(--ink2)">' + IC.gear + '</i><b>Impostazioni</b><small>Email, allarmi, backup</small></a></div>' +
       '<div class="card" style="margin-top:14px"><h3>I tuoi dati restano tuoi</h3><p class="small muted" style="margin:6px 0 0">Tutto è salvato solo su questo telefono. Le email vengono lette dal tuo account Google con uno script che crei tu: nessun server esterno. Fai ogni tanto un backup dalle Impostazioni.</p></div>' +
       '<p class="disclaimer">Cartellina v' + ((window.AppUpdate && window.AppUpdate.current) || '1.0.0') + '</p>';
@@ -1254,6 +1258,7 @@
     var l = D.regole[k];
     return '<h3 style="margin-bottom:6px">' + t + ' <span class="muted small">' + l.length + '</span></h3>' + (l.length ? l.map(function (a) { return '<div class="toggle" style="padding:7px 0"><span class="small ellipsis">' + esc(a) + '</span><button class="linkbtn small" style="color:var(--danger)" data-act="togliMitt" data-k="' + k + '" data-a="' + esc(a) + '">Togli</button></div>'; }).join('') : '<p class="small muted" style="margin:0">Nessuno.</p>');
   }
+  ACT.ponte = function () { if (window.Ponte) Ponte.apri(); };
   ACT.togliMitt = function (el) { D.regole[el.dataset.k] = D.regole[el.dataset.k].filter(function (a) { return a !== el.dataset.a; }); save(); syncRegole(); ridisegna(); };
   ACT.addFidato = function () { var a = $('#nuovoFid').value.trim().toLowerCase(); if (!a) return; if (D.regole.fidati.indexOf(a) < 0) D.regole.fidati.push(a); save(); syncRegole(); ridisegna(); toast('Aggiunto ✓'); };
   ACT.impAllarme = function (el) { D.imp.allarme = el.dataset.a; save(); $$('#segAll button').forEach(function (b) { b.classList.toggle('on', b === el); }); };
@@ -1333,6 +1338,104 @@
   };
 
   // ---------------------------------------------------------
+  // Ponte: collaborazione con AgendApp e Smistino
+  // ---------------------------------------------------------
+  function tipoDaTitolo(t) {
+    var n = Classificatore.norm(t || '');
+    if (/ricover|degenza/.test(n)) return 'Ricovero';
+    if (/intervent|operazion|chirurg/.test(n)) return 'Intervento';
+    if (/\btac\b|risonanz|\brm\b|ecograf|radiograf|\brx\b|mammograf|\bpet\b|scintigraf|densitometr|ecocardio|\becg\b|elettrocard|holter/.test(n)) return 'Diagnostica';
+    if (/esam|analisi|prelie|sangue|urine|tampone/.test(n)) return 'Esame';
+    if (/terapi|fisio|riabilit|seduta|infusion|chemio|dialisi|vaccin/.test(n)) return 'Terapia';
+    if (/visit|control|dott|medic|special|consulto/.test(n)) return 'Visita';
+    return 'Altro';
+  }
+  function pontePubblica() {
+    var lim = ymd(new Date(Date.now() - 30 * 864e5)), eventi = [], mitt = [];
+    D.eventi.forEach(function (e) {
+      if (e.demo || e.fonte === 'agendapp' || !e.data || e.data < lim) return;
+      var c = contatto(e.contattoId), porta = (e.portare || []).map(function (p) { return p.t; });
+      eventi.push({ id: e.id, tipo: 'appuntamento', titolo: e.titolo || e.tipo, data: e.data, ora: e.ora || '', luogo: e.luogo || '', indirizzo: e.indirizzo || '', area: 'salute',
+        note: [e.tipo, c ? c.nome + (c.tel ? ' · ' + c.tel : '') : '', porta.length ? 'Da portare: ' + porta.join(', ') : '', e.note].filter(Boolean).join('\n') });
+    });
+    var add = function (a) { a = String(a || '').trim().toLowerCase(); if (a && mitt.indexOf(a) < 0) mitt.push(a); };
+    D.regole.fidati.forEach(add);
+    D.contatti.forEach(function (c) { if (c.email && !c.demo) add(c.email); });
+    return { eventi: eventi, mittenti: mitt };
+  }
+  function ponteRicevi(da, dati) {
+    var n = 0, parti = [];
+    if (da === 'smistino') {
+      var lista = [];
+      (dati.messaggi || []).forEach(function (m) {
+        var id = m.gid || ('sm-' + m.id);
+        if (!m.id || D.email[id] || Ponte.ignorato('smistino:' + m.id)) return;
+        lista.push({ id: id, from: m.from || '', subject: m.subject || '', body: m.body || '', date: m.date, labels: m.labels || [], attachments: m.attachments || [] });
+      });
+      if (lista.length) {
+        var st = elabora(lista, 'smistino');
+        // Smistino l'ha già messa in Salute: se non sono sicura, la metto almeno da verificare
+        lista.forEach(function (e) { var r = D.email[e.id]; if (r && r.stato === 'scartata') { r.stato = 'verifica'; r.motivi = ['Smistino l\'ha messa in Salute'].concat(r.motivi || []); st.verifica++; } });
+        save();
+        n += st.nuove;
+        parti.push(st.nuove + ' email' + (st.sanitarie ? ', ' + st.sanitarie + ' sanitari' + (st.sanitarie > 1 ? 'e' : 'a') : '') + (st.verifica ? ', ' + st.verifica + ' da verificare' : '') + (st.eventi ? ', ' + st.eventi + ' in agenda' : ''));
+      }
+    }
+    if (da === 'agendapp') {
+      var lim = ymd(new Date(Date.now() - 30 * 864e5)), visti = {}, nuovi = 0, agg = 0;
+      (dati.eventi || []).forEach(function (x) {
+        if (!x || !x.id || !x.data || x.area !== 'salute') return;
+        var u = 'agendapp:' + x.id; visti[u] = 1;
+        if (Ponte.ignorato(u)) return;
+        var e = D.eventi.filter(function (y) { return y.ponte === u; })[0];
+        var v = { titolo: x.titolo || 'Appuntamento', data: x.data, ora: x.ora || '', luogo: x.luogo || '', note: x.note || '' };
+        if (!e) {
+          // già in agenda (es. arrivato da un'email)? allora è lo stesso
+          if (D.eventi.some(function (y) { return y.data === x.data && (y.ora || '') === (x.ora || '') && y.fonte !== 'agendapp'; })) return;
+          D.eventi.push({ id: uid(), tipo: tipoDaTitolo(x.titolo), titolo: v.titolo, data: v.data, ora: v.ora, luogo: v.luogo, indirizzo: '', contattoId: '', portare: [], note: v.note,
+            fonte: 'agendapp', ponte: u, emailId: '', demo: false, creato: Date.now() });
+          nuovi++;
+        } else {
+          var prima = JSON.stringify([e.titolo, e.data, e.ora, e.luogo, e.note]);
+          e.titolo = v.titolo; e.data = v.data; e.ora = v.ora; e.luogo = v.luogo; e.note = v.note;
+          if (prima !== JSON.stringify([e.titolo, e.data, e.ora, e.luogo, e.note])) agg++;
+        }
+      });
+      var prima = D.eventi.length;
+      D.eventi = D.eventi.filter(function (e) { return !(e.fonte === 'agendapp' && e.ponte && !visti[e.ponte] && e.data >= lim); });
+      var tolti = prima - D.eventi.length;
+      if (nuovi + agg + tolti) {
+        save(); n += nuovi + agg + tolti;
+        parti.push([nuovi ? nuovi + ' appuntament' + (nuovi === 1 ? 'o' : 'i') + ' in agenda' : '', agg ? agg + ' aggiornat' + (agg === 1 ? 'o' : 'i') : '', tolti ? tolti + ' tolt' + (tolti === 1 ? 'o' : 'i') : ''].filter(Boolean).join(', '));
+      }
+    }
+    return { n: n, testo: parti.join(', ') };
+  }
+  function ponteScollega(da, prova) {
+    if (da === 'agendapp') {
+      var k = D.eventi.filter(function (e) { return e.fonte === 'agendapp'; }).length;
+      if (!prova && k) { D.eventi = D.eventi.filter(function (e) { return e.fonte !== 'agendapp'; }); save(); }
+      return k;
+    }
+    if (da === 'smistino') {
+      var ids = Object.keys(D.email).filter(function (i) { return D.email[i].fonte === 'smistino'; });
+      if (!prova && ids.length) { ids.forEach(function (i) { D.eventi = D.eventi.filter(function (e) { return e.emailId !== i; }); delete D.email[i]; }); save(); }
+      return ids.length;
+    }
+    return 0;
+  }
+  function avviaPonte() {
+    if (!window.Ponte) return;
+    Ponte.init({
+      app: 'cartellina', pubblica: pontePubblica, ricevi: ponteRicevi, scollega: ponteScollega, dopo: ridisegna, toast: toast,
+      descr: {
+        agendapp: 'Riceve visite, esami e interventi con orari e luogo. Gli impegni che metti in AgendApp nell\'area Salute arrivano qui.',
+        smistino: 'Mi manda le email e i messaggi della sezione Salute, da tutte le tue caselle e chat. Io gli passo medici e ospedali della rubrica.'
+      }
+    });
+  }
+
+  // ---------------------------------------------------------
   // Avvio
   // ---------------------------------------------------------
   var pollTimer = null;
@@ -1371,6 +1474,7 @@
   pulisci(false); save();
   gestisciParametri();
   route();
+  avviaPonte();
   setInterval(tick, 15000);
   setTimeout(tick, 1500);
   avviaPolling();

@@ -1,8 +1,10 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "date": "10/11/2026",
   "notes": [
-    "Prima versione di Cartellina",
-    "Email sanitarie lette e smistate in automatico, agenda, farmaci con allarmi, rubrica, glossario e trasporti"
+    "Nuovo: Collega le app — Cartellina lavora insieme ad AgendApp e Smistino",
+    "Visite, esami e interventi vanno anche in AgendApp; gli impegni di Salute di AgendApp arrivano qui",
+    "Ricevi le email sanitarie da tutte le caselle e le chat collegate a Smistino",
+    "Corretto: aggiornare un'app non cancella più la versione installata delle altre"
   ]
 }
