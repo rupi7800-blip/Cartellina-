@@ -1,10 +1,12 @@
 {
-  "version": "1.1.0",
-  "date": "10/11/2026",
+  "version": "2.0.0",
+  "date": "15/11/2026",
   "notes": [
-    "Nuovo: Collega le app — Cartellina lavora insieme ad AgendApp e Smistino",
-    "Visite, esami e interventi vanno anche in AgendApp; gli impegni di Salute di AgendApp arrivano qui",
-    "Ricevi le email sanitarie da tutte le caselle e le chat collegate a Smistino",
-    "Corretto: aggiornare un'app non cancella più la versione installata delle altre"
+    "Nuova grafica più semplice e leggibile, con modalità scura e testo più grande",
+    "Nuovo menu: Home, Email, Documenti, Calendario, Assistente",
+    "Home con \"Da fare\": tutto ciò che richiede attenzione",
+    "Archivio documenti: PDF, foto, ricerca, note e percorsi di cura",
+    "Email: categorie, riassunto, scadenze e richieste; le date entrano in calendario solo se le confermi",
+    "Ricerca unica e assistente; PIN con dati cifrati; registro delle attività ed esportazione"
   ]
 }

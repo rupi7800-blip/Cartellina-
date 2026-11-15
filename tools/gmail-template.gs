@@ -8,8 +8,17 @@
    2. Salva, scegli la funzione "installa" e premi Esegui (accetta i permessi).
    3. Esegui il deployment → Nuovo deployment → App web
       Esegui come: Me · Chi può accedere: Chiunque → copia l'URL /exec.
+
+   COSA FA E COSA NON FA
+   - Legge le email recenti e le passa SOLO alla tua app (con la parola segreta).
+   - Può aggiungere le etichette "Cartellina/…" (vedi METTI_ETICHETTE).
+   - Non cancella, non sposta, non archivia e non invia email. Mai.
    ========================================================= */
 const CODICE_SEGRETO = 'scrivi-qui-la-tua-parola-segreta';
+// true = mette le etichette "Cartellina/Sanitaria" e "Cartellina/Da verificare" in Gmail
+// (le email restano dove sono). false = non tocca niente nella casella.
+const METTI_ETICHETTE = true;
+const VERSIONE_SCRIPT = 2;
 
 const ETICHETTA_OK = 'Cartellina/Sanitaria';
 const ETICHETTA_DUBBIO = 'Cartellina/Da verificare';
@@ -31,6 +40,7 @@ function analizzaNuove() {
   const adesso = Math.floor(Date.now() / 1000);
   const regole = regole_();
   const threads = GmailApp.search('after:' + ultimo + ' -in:spam -in:trash', 0, 100);
+  if (!METTI_ETICHETTE) { props.setProperty('ultimo', String(adesso - 60)); return; }
   const ok = etichetta_(ETICHETTA_OK), dubbio = etichetta_(ETICHETTA_DUBBIO);
   threads.forEach(t => {
     t.getMessages().forEach(m => {
@@ -46,7 +56,7 @@ function analizzaNuove() {
 /** Indirizzo web chiamato dall'app */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (!p.token || p.token !== CODICE_SEGRETO) return json_({ error: 'token' });
+  if (!p.token || !uguale_(p.token, CODICE_SEGRETO) || CODICE_SEGRETO === 'scrivi-qui-la-tua-parola-segreta') return json_({ error: 'token' });
   const props = PropertiesService.getScriptProperties();
 
   if (p.azione === 'regole') {
@@ -54,7 +64,16 @@ function doGet(e) {
     props.setProperty('bloccati', p.bloccati || '');
     return json_({ ok: true });
   }
+  if (p.azione === 'allegato' && p.id) {
+    try {
+      const a = GmailApp.getMessageById(p.id).getAttachments({ includeInlineImages: false })[parseInt(p.i || '0', 10)];
+      if (!a) return json_({ error: 'allegato non trovato' });
+      if (a.getSize() > 15 * 1024 * 1024) return json_({ error: 'allegato troppo grande (oltre 15 MB)' });
+      return json_({ ok: true, nome: a.getName(), tipo: a.getContentType(), dati: Utilities.base64Encode(a.getBytes()) });
+    } catch (err) { return json_({ error: String(err) }); }
+  }
   if (p.azione === 'etichetta' && p.id) {
+    if (!METTI_ETICHETTE) return json_({ ok: true });
     try {
       const t = GmailApp.getMessageById(p.id).getThread();
       if (p.stato === 'sanitaria') { t.addLabel(etichetta_(ETICHETTA_OK)); t.removeLabel(etichetta_(ETICHETTA_DUBBIO)); }
@@ -78,11 +97,12 @@ function doGet(e) {
       out.push(em);
     });
   });
-  return json_({ ok: true, emails: out, ora: new Date().toISOString() });
+  return json_({ ok: true, versione: VERSIONE_SCRIPT, emails: out, ora: new Date().toISOString() });
 }
 
 // ---------- supporto ----------
 function email_(m, t) {
+  const allegati = m.getAttachments({ includeInlineImages: false });
   return {
     id: m.getId(),
     from: m.getFrom(),
@@ -90,7 +110,8 @@ function email_(m, t) {
     date: m.getDate().toISOString(),
     body: (m.getPlainBody() || '').replace(/\n{3,}/g, '\n\n').slice(0, 6000),
     labels: t.getLabels().map(l => l.getName()),
-    attachments: m.getAttachments({ includeInlineImages: false }).map(a => a.getName())
+    attachments: allegati.map(a => a.getName()),
+    allegati: allegati.map((a, i) => ({ i: i, nome: a.getName(), tipo: a.getContentType(), kb: Math.round(a.getSize() / 1024) }))
   };
 }
 function regole_() {
@@ -98,6 +119,7 @@ function regole_() {
   const lista = k => (props.getProperty(k) || '').split(',').map(s => s.trim()).filter(Boolean);
   return { fidati: lista('fidati'), bloccati: lista('bloccati') };
 }
+function uguale_(a, b) { a = String(a); b = String(b); let d = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return d === 0; }
 function etichetta_(nome) { return GmailApp.getUserLabelByName(nome) || GmailApp.createLabel(nome); }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 

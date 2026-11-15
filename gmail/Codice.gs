@@ -8,8 +8,17 @@
    2. Salva, scegli la funzione "installa" e premi Esegui (accetta i permessi).
    3. Esegui il deployment → Nuovo deployment → App web
       Esegui come: Me · Chi può accedere: Chiunque → copia l'URL /exec.
+
+   COSA FA E COSA NON FA
+   - Legge le email recenti e le passa SOLO alla tua app (con la parola segreta).
+   - Può aggiungere le etichette "Cartellina/…" (vedi METTI_ETICHETTE).
+   - Non cancella, non sposta, non archivia e non invia email. Mai.
    ========================================================= */
 const CODICE_SEGRETO = 'scrivi-qui-la-tua-parola-segreta';
+// true = mette le etichette "Cartellina/Sanitaria" e "Cartellina/Da verificare" in Gmail
+// (le email restano dove sono). false = non tocca niente nella casella.
+const METTI_ETICHETTE = true;
+const VERSIONE_SCRIPT = 2;
 
 const ETICHETTA_OK = 'Cartellina/Sanitaria';
 const ETICHETTA_DUBBIO = 'Cartellina/Da verificare';
@@ -31,6 +40,7 @@ function analizzaNuove() {
   const adesso = Math.floor(Date.now() / 1000);
   const regole = regole_();
   const threads = GmailApp.search('after:' + ultimo + ' -in:spam -in:trash', 0, 100);
+  if (!METTI_ETICHETTE) { props.setProperty('ultimo', String(adesso - 60)); return; }
   const ok = etichetta_(ETICHETTA_OK), dubbio = etichetta_(ETICHETTA_DUBBIO);
   threads.forEach(t => {
     t.getMessages().forEach(m => {
@@ -46,7 +56,7 @@ function analizzaNuove() {
 /** Indirizzo web chiamato dall'app */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (!p.token || p.token !== CODICE_SEGRETO) return json_({ error: 'token' });
+  if (!p.token || !uguale_(p.token, CODICE_SEGRETO) || CODICE_SEGRETO === 'scrivi-qui-la-tua-parola-segreta') return json_({ error: 'token' });
   const props = PropertiesService.getScriptProperties();
 
   if (p.azione === 'regole') {
@@ -54,7 +64,16 @@ function doGet(e) {
     props.setProperty('bloccati', p.bloccati || '');
     return json_({ ok: true });
   }
+  if (p.azione === 'allegato' && p.id) {
+    try {
+      const a = GmailApp.getMessageById(p.id).getAttachments({ includeInlineImages: false })[parseInt(p.i || '0', 10)];
+      if (!a) return json_({ error: 'allegato non trovato' });
+      if (a.getSize() > 15 * 1024 * 1024) return json_({ error: 'allegato troppo grande (oltre 15 MB)' });
+      return json_({ ok: true, nome: a.getName(), tipo: a.getContentType(), dati: Utilities.base64Encode(a.getBytes()) });
+    } catch (err) { return json_({ error: String(err) }); }
+  }
   if (p.azione === 'etichetta' && p.id) {
+    if (!METTI_ETICHETTE) return json_({ ok: true });
     try {
       const t = GmailApp.getMessageById(p.id).getThread();
       if (p.stato === 'sanitaria') { t.addLabel(etichetta_(ETICHETTA_OK)); t.removeLabel(etichetta_(ETICHETTA_DUBBIO)); }
@@ -78,11 +97,12 @@ function doGet(e) {
       out.push(em);
     });
   });
-  return json_({ ok: true, emails: out, ora: new Date().toISOString() });
+  return json_({ ok: true, versione: VERSIONE_SCRIPT, emails: out, ora: new Date().toISOString() });
 }
 
 // ---------- supporto ----------
 function email_(m, t) {
+  const allegati = m.getAttachments({ includeInlineImages: false });
   return {
     id: m.getId(),
     from: m.getFrom(),
@@ -90,7 +110,8 @@ function email_(m, t) {
     date: m.getDate().toISOString(),
     body: (m.getPlainBody() || '').replace(/\n{3,}/g, '\n\n').slice(0, 6000),
     labels: t.getLabels().map(l => l.getName()),
-    attachments: m.getAttachments({ includeInlineImages: false }).map(a => a.getName())
+    attachments: allegati.map(a => a.getName()),
+    allegati: allegati.map((a, i) => ({ i: i, nome: a.getName(), tipo: a.getContentType(), kb: Math.round(a.getSize() / 1024) }))
   };
 }
 function regole_() {
@@ -98,6 +119,7 @@ function regole_() {
   const lista = k => (props.getProperty(k) || '').split(',').map(s => s.trim()).filter(Boolean);
   return { fidati: lista('fidati'), bloccati: lista('bloccati') };
 }
+function uguale_(a, b) { a = String(a); b = String(b); let d = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return d === 0; }
 function etichetta_(nome) { return GmailApp.getUserLabelByName(nome) || GmailApp.createLabel(nome); }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -420,5 +442,136 @@ var Classificatore = (function () {
     };
   }
 
-  return { classifica: classifica, estrai: estrai, tipoDa: tipoDa, estraiDate: estraiDate, telefoni: telefoni, norm: norm };
+  // =========================================================
+  // ANALISI COMPLETA (v2): categoria, scadenze, richieste,
+  // preparazioni, azioni da fare, riassunto semplice.
+  // Tutto con regole sul testo: nessun servizio esterno.
+  // =========================================================
+  var CATEGORIE = [
+    { k: 'referti', n: 'Referti e risultati', re: /referto|referti|esito|esiti|risultat[io]/g },
+    { k: 'prenotazioni', n: 'Prenotazioni', re: /prenotazion|prenotat[oa]|disdett|annullament|spostament|codice prenotazione|\bcup\b|recup/g },
+    { k: 'esami', n: 'Esami diagnostici', re: /\besam[ei]\b|analisi|prelie|ecografi|risonanza|\brmn?\b|\btac\b|\btc\b|radiografi|mammografi|holter|\becg\b|endoscop|colonscop|gastroscop|biopsi|scintigrafi|densitometri/g },
+    { k: 'visite', n: 'Visite mediche', re: /\bvisit[ae]\b|controllo|televisita|consulto|consulenza/g },
+    { k: 'farmaci', n: 'Farmaci e prescrizioni', re: /ricett[ae]|prescrizion|farmac|\bnre\b|piano terapeutico|impegnativ/g },
+    { k: 'terapie', n: 'Terapie e trattamenti', re: /terapi[ae]|chemioterapi|radioterapi|dialisi|fisioterapi|riabilitazion|infusion|sedut[ae]/g },
+    { k: 'assicurazioni', n: 'Assicurazioni e pratiche sanitarie', re: /assicurazion|polizza|sinistro|fondo sanitario|cassa sanitaria|mutua|pratica/g },
+    { k: 'rimborsi', n: 'Rimborsi e pagamenti sanitari', re: /rimbors|pagament|pagopa|fattur|\bticket\b|ricevut|bollettino/g },
+    { k: 'amministrative', n: 'Comunicazioni amministrative', re: /invalidit|legge 104|commissione|esenzion|fascicolo|certificat|modulo|scelta del medico|tessera sanitaria|\binps\b|domanda/g },
+    { k: 'strutture', n: 'Ospedali e strutture sanitarie', re: /ricover|intervent|ospedal|\basst\b|\basl\b|\bats\b|policlinic|irccs|clinica|reparto/g },
+    { k: 'medici', n: 'Medici e specialisti', re: /\bdott\.?(ssa)?\b|dottor|\bdr\.|medico|specialista|studio medico/g }
+  ];
+  var NOMI_CAT = {};
+  CATEGORIE.forEach(function (c) { NOMI_CAT[c.k] = c.n; });
+  NOMI_CAT.non_sanitaria = 'Email non sanitaria';
+
+  function contaRe(re, t) { re.lastIndex = 0; var n = 0; while (re.exec(t)) { n++; if (n > 6) break; } return n; }
+
+  /** categoria dell'email: ritorna { k, nome, certa } — k vuoto se non è riconoscibile con sicurezza */
+  function categoria(email, stato, regole) {
+    if (stato === 'scartata') return { k: 'non_sanitaria', nome: NOMI_CAT.non_sanitaria, certa: true };
+    var addr = indirizzo(email.from);
+    var imparate = (regole && regole.categorie) || {};
+    if (imparate[addr]) return { k: imparate[addr], nome: NOMI_CAT[imparate[addr]] || imparate[addr], certa: true, imparata: true };
+    var subj = norm(email.subject), body = norm(String(email.body || '').slice(0, 6000));
+    var best = null;
+    CATEGORIE.forEach(function (c, i) {
+      var p = contaRe(c.re, subj) * 3 + Math.min(contaRe(c.re, body), 4);
+      if (p > 0 && (!best || p > best.p)) best = { k: c.k, p: p, i: i };
+    });
+    if (!best || best.p < 2) {
+      if (DOMINI_FORTI.some(function (d) { return addr.indexOf(d) !== -1; })) return { k: 'strutture', nome: NOMI_CAT.strutture, certa: false };
+      return { k: '', nome: 'Argomento non riconosciuto', certa: false };
+    }
+    return { k: best.k, nome: NOMI_CAT[best.k], certa: best.p >= 4 };
+  }
+
+  function frasi(testo) {
+    return String(testo || '').replace(/\r/g, '').replace(/([.!?;])\s+/g, '$1\n').split(/\n+/)
+      .map(function (f) { return f.replace(/\s+/g, ' ').trim(); }).filter(function (f) { return f.length > 3; });
+  }
+  function taglia(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : s; }
+
+  var AZIONI = [
+    { k: 'ritirare', n: 'Ritirare o scaricare un referto', re: /\b(ritir[ao]re?|ritiro|scaricabil[ei]|scaricar(e|li|lo)|disponibil[ei] (sul|nel|presso|online|dal)|sono disponibili)\b/ },
+    { k: 'confermare', n: 'Confermare l\'appuntamento', re: /\b(confermi|confermare|conferma(re)? la (sua|tua) presenza|rispond(a|ere|i) a questa|chiediamo di confermare)\b/ },
+    { k: 'prenotare', n: 'Prenotare o fissare un appuntamento', re: /\b(prenoti|prenotare|fissare|fissi|contatti il cup|chiami .{0,40}per (fissare|prenotare))\b/ },
+    { k: 'inviare', n: 'Inviare un documento', re: /\b(invi(i|are|arci)|trasmett(a|ere)|allegare|alleghi|far pervenire|faccia pervenire|caricare sul portale)\b/ },
+    { k: 'pagare', n: 'Effettuare un pagamento', re: /\b(pagare|pagamento|pagopa|versare|saldare|da pagare)\b/ },
+    { k: 'rinnovare', n: 'Rinnovare una prescrizione o un\'esenzione', re: /\b(rinnov(o|are|i)|in scadenza|scadr[aà]|sta per scadere)\b/ }
+  ];
+  var RE_DOC = /\b(document[oi]|certificat[oi]|modul[oi]|copia|ricevut[ae]|referto|referti|impegnativ[ae]|ricett[ae]|consenso|attestat[oi]|carta d.identit|tessera)\b/;
+  var RE_RICHIESTA = /\b(invi(i|are|arci)|trasmett(a|ere)|allegare|alleghi|presentare|presenti|portare|porti|consegnare|consegni|esibire|far pervenire|compilare|compili|firmare|firmi)\b/;
+  var RE_PREP = /\b(digiuno|a digiuno|sospendere|sospenda|non assumere|non assuma|bere|beva|vescica piena|preparazione|lassativ|dieta|evitare|eviti|presentarsi|si presenti|presentarsi|minuti prima|mezzo di contrasto|accompagnat)\b/;
+  var RE_SCAD = /(entro|scadenza|scade|scadr[aà]|non oltre|termine|valid[oa] fino|fino al)\s*(il|al|del|le ore)?\s*$/i;
+
+  var GGN = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+  var MMN = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  function dataLeggibile(ymd) { var p = ymd.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]); return GGN[d.getDay()] + ' ' + d.getDate() + ' ' + MMN[d.getMonth()] + ' ' + d.getFullYear(); }
+
+  function struttura(email, x) {
+    var nome = String(email.from || '').replace(/<[^>]+>/, '').replace(/"/g, '').trim();
+    if (/asst|asl|ausl|ats|ospedal|policlinic|irccs|clinica|laborator|diagnostic|centro|cup|poliambulator|casa di cura|fondazione|istituto|dott|dr\.|studio/i.test(nome)) return nome;
+    if (x.luogo && x.luogo.presso) return taglia(x.luogo.presso.split(',')[0], 70);
+    return nome || dominio(indirizzo(email.from));
+  }
+
+  /** analisi completa di un'email sanitaria */
+  function analizza(email, oggi, regole, stato) {
+    oggi = oggi ? new Date(oggi) : new Date();
+    var x = estrai(email, oggi);
+    var testo = (email.subject || '') + '\n' + (email.body || '');
+    var low = norm(testo);
+    var inizioOggi = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate());
+    var fr = frasi(email.body || '');
+
+    // scadenze: date precedute da "entro", "scadenza"...
+    var scadenze = [];
+    estraiDate(testo, oggi).forEach(function (d) {
+      var prima = testo.slice(Math.max(0, d.pos - 45), d.pos);
+      if (!RE_SCAD.test(prima)) return;
+      var data = d.a + '-' + pad(d.m) + '-' + pad(d.g);
+      if (new Date(d.a, d.m - 1, d.g) < inizioOggi) return;
+      var inizio = Math.max(testo.lastIndexOf('\n', d.pos), testo.lastIndexOf('. ', d.pos), 0);
+      scadenze.push({ data: data, testo: taglia(testo.slice(inizio, d.pos + d.len + 40).replace(/^[\n. ]+/, '').split('\n')[0], 140) });
+    });
+    // le date di scadenza non sono appuntamenti
+    x.eventi = x.eventi.filter(function (e) { return !scadenze.some(function (s) { return s.data === e.data && !e.ora; }); });
+
+    var richieste = fr.filter(function (f) { var n = norm(f); return RE_RICHIESTA.test(n) && RE_DOC.test(n); }).slice(0, 4).map(function (f) { return taglia(f, 180); });
+    var preparazione = fr.filter(function (f) { return RE_PREP.test(norm(f)); }).slice(0, 4).map(function (f) { return taglia(f, 180); });
+    var azioni = [];
+    AZIONI.forEach(function (a) {
+      var f = fr.filter(function (z) { return a.re.test(norm(z)); })[0];
+      if (f) azioni.push({ k: a.k, nome: a.n, testo: taglia(f, 160) });
+    });
+    // "le confermiamo la prenotazione" non è una richiesta di pagamento o conferma
+    var allegati = (email.allegati && email.allegati.length ? email.allegati : (email.attachments || []).map(function (n) { return { nome: n }; }))
+      .map(function (a, i) { return { nome: a.nome || a.name || String(a), tipo: a.tipo || '', kb: a.kb || 0, i: a.i != null ? a.i : i }; });
+    var cat = categoria(email, stato || 'sanitaria', regole);
+    var str = struttura(email, x);
+
+    // riassunto semplice
+    var r = [];
+    x.eventi.slice(0, 2).forEach(function (e) {
+      r.push('Appuntamento: ' + e.titolo + ', ' + dataLeggibile(e.data) + (e.ora ? ' alle ' + e.ora : '') + (e.luogo ? ', presso ' + taglia(e.luogo, 70) : '') + '.');
+    });
+    if (scadenze.length) r.push('Scadenza: ' + dataLeggibile(scadenze[0].data) + '.');
+    if (azioni.length) r.push('Ti chiedono di: ' + azioni.map(function (a) { return a.nome.toLowerCase(); }).join('; ') + '.');
+    if (x.portare.length) r.push('Da portare: ' + x.portare.join(', ').toLowerCase() + '.');
+    if (preparazione.length && !x.portare.length) r.push('Preparazione: ' + preparazione[0]);
+    if (allegati.length) r.push('Allegat' + (allegati.length > 1 ? 'i: ' + allegati.length + ' file' : 'o: ' + allegati[0].nome) + '.');
+    if (!r.length) {
+      var prima = fr.filter(function (f) { return !/^(gentil|buongiorno|buonasera|salve|ciao|egregi|spett|cordiali|distinti|grazie)/i.test(f) && f.length > 25; })[0];
+      if (prima) r.push('Dal testo: «' + taglia(prima, 200) + '»');
+    }
+    r = r.map(function (f) { return f.replace(/…\.$/, '…').replace(/\.\.$/, '.'); });
+    x.categoria = cat.k; x.categoriaNome = cat.nome; x.categoriaCerta = cat.certa;
+    x.struttura = str; x.scadenze = scadenze; x.richieste = richieste; x.preparazione = preparazione;
+    x.azioni = azioni; x.allegati = allegati; x.riassunto = r.join(' ');
+    x.versione = 2;
+    return x;
+  }
+
+  return { classifica: classifica, estrai: estrai, analizza: analizza, categoria: categoria, CATEGORIE: CATEGORIE, NOMI_CAT: NOMI_CAT, AZIONI: AZIONI,
+    tipoDa: tipoDa, estraiDate: estraiDate, telefoni: telefoni, norm: norm, frasi: frasi, dataLeggibile: dataLeggibile, indirizzo: indirizzo };
 })();
