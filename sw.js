@@ -4,10 +4,14 @@
    una versione nuova. Non serve cambiare questo file a ogni rilascio. */
 const CACHE = 'cartellina-app';
 const ASSETS = [
-  './', './index.html', './css/style.css', './js/app.js', './js/classificatore.js', './js/glossario.js', './js/esempi.js',
-  './js/aggiornamenti.js', './js/ponte.js', './manifest.webmanifest', './gmail/Codice.gs',
+  './', './index.html', './css/style.css',
+  './js/classificatore.js', './js/glossario.js', './js/esempi.js', './js/ponte.js', './js/aggiornamenti.js',
+  './js/archivio.js', './js/core.js', './js/v-calendario.js', './js/v-farmaci.js', './js/v-supporto.js', './js/v-email.js',
+  './js/v-documenti.js', './js/v-home.js', './js/v-assistente.js', './js/ai.js', './js/v-impostazioni.js', './js/avvio.js',
+  './manifest.webmanifest', './gmail/Codice.gs',
   './icons/logo.svg', './icons/icon-32.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'
 ];
+// la libreria PDF (1,7 MB) si scarica e si conserva solo la prima volta che serve
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -51,9 +55,8 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // file dell'app e font: prima la copia installata (le chiamate a Gmail, Wikipedia, mappe vanno sempre in rete)
-  const font = url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com');
-  if (url.origin === self.location.origin || font) {
+  // file dell'app: prima la copia installata (Gmail, Wikipedia, mappe, assistente vanno sempre in rete e non vengono mai salvati)
+  if (url.origin === self.location.origin) {
     e.respondWith(
       caches.match(req, { ignoreSearch: url.origin === self.location.origin })
         .then(hit => hit || fromNetwork(req))
