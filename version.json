@@ -1,5 +1,5 @@
 {
-  "version": "2.1.2",
+  "version": "2.1.3",
   "date": "28/11/2026",
   "notes": [
     "App Android: la cartella Documenti/Cartellina si crea da sola e tiene una copia di dati e documenti (cifrata se c'è il PIN)",

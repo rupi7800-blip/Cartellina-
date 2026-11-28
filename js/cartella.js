@@ -245,6 +245,11 @@
       errore = ''; await inCoda(sincronizzaTutto); A.toast('Cartella aggiornata', 3000); A.ridisegna();
     } catch (e) { gestisciErrore(e); }
   };
+  function apribile() { try { return !!(nativa() && window.Capacitor.Plugins.ApriCartella); } catch (e) { return false; } }
+  A.ACT.cartellaApri = async function () {
+    try { await window.Capacitor.Plugins.ApriCartella.apri({ cartella: 'Cartellina' }); }
+    catch (e) { A.toast('Non riesco ad aprirla da qui. Apri l\'app «File» del telefono, poi Documenti, poi «Cartellina».', 8000); }
+  };
   A.ACT.cartellaSincronizza = async function () {
     if (!Archivio.pinAttivo() && !ultima() && !confirm('Questo profilo non ha il PIN: la copia nella cartella sarà LEGGIBILE da chiunque apra la cartella. Per averla cifrata attiva prima il PIN. Copio lo stesso in chiaro?')) return;
     try { if (await permesso(true) !== 'granted') { A.toast('Accesso alla cartella non concesso', 4000); return; } errore = ''; A.toast('Salvo la copia…', 1500); await inCoda(sincronizzaTutto); if (!errore) A.toast('Copia salvata nella cartella', 3000); A.ridisegna(); }
@@ -338,7 +343,7 @@
         A.fatto('Ultima copia di questo profilo', quando(u0)) +
         A.fatto('Contenuto', Archivio.pinAttivo() ? 'Cifrato con il PIN di questo profilo' : (u0 ? 'In chiaro (il profilo non ha il PIN)' : 'Non ancora copiato: senza PIN la copia sarebbe in chiaro')) +
         '<label class="toggle"><span><b>Copia anche questo profilo</b></span><span class="switch"><input type="checkbox" data-act="cartellaProfilo"' + (A.D.imp.cartella !== false ? ' checked' : '') + '><i></i></span></label>' +
-        '<div class="btns col"><button class="btn" data-act="cartellaSincronizza">' + IC.refresh + (!Archivio.pinAttivo() && !u0 ? 'Copia adesso (in chiaro)' : 'Salva la copia adesso') + '</button><button class="btn ghost" data-act="ripristinaCartella">' + IC.down + 'Ripristina un profilo dalla cartella</button></div>' +
+        '<div class="btns col">' + (apribile() ? '<button class="btn" data-act="cartellaApri">' + IC.doc + 'Apri la cartella nei File</button>' : '') + '<button class="btn' + (apribile() ? ' ghost' : '') + '" data-act="cartellaSincronizza">' + IC.refresh + (!Archivio.pinAttivo() && !u0 ? 'Copia adesso (in chiaro)' : 'Salva la copia adesso') + '</button><button class="btn ghost" data-act="ripristinaCartella">' + IC.down + 'Ripristina un profilo dalla cartella</button></div>' +
         '<p class="muted small">' + (Archivio.pinAttivo() ? 'La copia si aggiorna da sola dopo ogni modifica ed è cifrata. Chi copia la cartella può provare i PIN senza limiti di tentativi: con un PIN corto di sole cifre la protezione è debole, usa una frase lunga. Il nome della sottocartella è il nome del profilo, anche con il PIN, e nel file profilo.json resta il verificatore del PIN (serve al ripristino).' : 'Senza PIN i file nella cartella sono leggibili da chiunque abbia accesso ai file del telefono: per questo la prima copia parte solo se la confermi tu. Attiva il PIN in Impostazioni per averla cifrata e automatica.') +
         ' Se disinstalli l\'app, Android può non lasciare più accesso ai file che aveva creato: tieni anche un\'esportazione.</p></section>';
     }
