@@ -68,7 +68,7 @@
     h += '<section class="card" id="sApp"><h2>Collega le app</h2><p>Scambia appuntamenti ed email con AgendApp e Smistino sullo stesso telefono.' + (Archivio.pinAttivo() ? ' <b>Attenzione:</b> i dati condivisi con le altre app non sono protetti dal PIN di Cartellina.' : '') + '</p>' + (A.ponteQui ? '<button class="btn sec" data-act="ponte">' + IC.link + (window.Ponte && Ponte.attivo() ? 'Gestisci il collegamento' : 'Collega AgendApp e Smistino') + '</button>' : '<p class="notice">Il collegamento con AgendApp e Smistino è unico per telefono e riguarda il profilo «' + esc((Archivio.profilo(Archivio.ponteProfilo()) || {}).nome || '') + '». Passa a quel profilo per gestirlo.</p>') + '</section>';
     // dati di prova e versione
     if (Object.keys(D().email).some(function (k) { return D().email[k].demo; })) h += '<section class="card"><h2>Dati di prova</h2><button class="btn ghost" data-act="togliDemo">' + IC.trash + 'Togli le email e gli appuntamenti di prova</button></section>';
-    h += '<section class="card"><div class="row"><div class="grow"><b>Cartellina ' + ((window.AppUpdate && window.AppUpdate.current) || '') + '</b><br><span class="muted small">Il tasto Aggiorna compare in alto quando c\'è una novità</span></div><button class="btn sm sec" data-act="checkUpd">Controlla</button></div></section>';
+    h += '<section class="card"><div class="row"><div class="grow"><b>Cartellina ' + ((window.AppUpdate && window.AppUpdate.current) || '') + '</b><br><span class="muted small">L\'app controlla da sola; quando c\'è una novità compare l\'avviso «Aggiornamento disponibile»</span></div><button class="btn sm sec" data-act="checkUpd">Controlla</button></div></section>';
     v.innerHTML = h;
 
     A.$$('[data-imp]', v).forEach(function (el) { el.addEventListener('change', function () { D().imp[el.dataset.imp] = el.checked; A.save(); }); });
@@ -102,7 +102,7 @@
   A.ACT.togliMitt = function (el) { D().regole[el.dataset.k] = D().regole[el.dataset.k].filter(function (a) { return a !== el.dataset.a; }); A.save(); A.syncRegole(); A.ridisegna(); };
   A.ACT.addFidato = function () { var a = A.$('#nuovoFid').value.trim().toLowerCase(); if (!a) return; if (D().regole.fidati.indexOf(a) < 0) D().regole.fidati.push(a); A.save(); A.syncRegole(); A.ridisegna(); A.toast('Aggiunto'); };
   A.ACT.attivaNotifiche = function () { Notification.requestPermission().then(function () { A.ridisegna(); }); };
-  A.ACT.checkUpd = function () { if (window.AppUpdate) window.AppUpdate.check().then(function (n) { if (!n) A.toast('Hai già l\'ultima versione'); }); };
+  A.ACT.checkUpd = function () { if (window.AppUpdate) window.AppUpdate.check().then(function (n) { if (n) { window.AppUpdate.mostra(); return; } A.toast(window.AppUpdate.esito() === 'errore' ? 'Non riesco a controllare adesso. Verifica la connessione e riprova.' : 'Hai già l\'ultima versione'); }); };
   A.ACT.generaToken = function () {
     var a = new Uint8Array(18); crypto.getRandomValues(a);
     var t = Array.prototype.map.call(a, function (x) { return 'abcdefghijkmnpqrstuvwxyz23456789'[x % 32]; }).join('');
@@ -166,7 +166,7 @@
   A.VIEWS.privacy = function (v) {
     var reg = D().registro;
     var h = '<a class="back" href="#/impostazioni">' + IC.left + 'Impostazioni</a>' + A.pagina('Privacy e dati', 'I tuoi dati restano tuoi');
-    h += '<section class="card"><h2>Dove sono i tuoi dati</h2><p>Tutto — email lette, appuntamenti, documenti, note — è salvato <b>solo su questo dispositivo</b>' + (Archivio.pinAttivo() ? ', cifrato con il tuo PIN (AES-256).' : '. <b>Non è cifrato</b>: <a href="#/impostazioni">attiva il PIN</a>.') + ' Cartellina non ha un server, non usa pubblicità, non traccia cosa fai e non condivide nulla automaticamente.</p></section>';
+    h += '<section class="card"><h2>Dove sono i tuoi dati</h2><p>Tutto — email lette, appuntamenti, documenti, note — è salvato <b>solo su questo dispositivo</b>' + (Archivio.pinAttivo() ? ', cifrato con il tuo PIN (AES-256).' : '. <b>Non è cifrato</b>: <a href="#/impostazioni">attiva il PIN</a>.') + ' Cartellina non ha un server, non usa pubblicità, non traccia cosa fai e non condivide nulla automaticamente.</p><p class="muted small">Per sapere se c\'è una versione nuova l\'app legge un piccolo file dal sito pubblico di Cartellina: GitHub vede quindi che l\'app è aperta (indirizzo IP e orario), non i tuoi dati.</p></section>';
     h += (window.Cartella ? Cartella.card() : '');
     h += '<section class="card"><h2>Cosa esce dal dispositivo, e quando</h2><ul class="plain-list">' +
       '<li><b>Gmail</b>: lo script che crei sul tuo account Google legge le email e le passa solo a Cartellina, con la tua parola segreta. Non cancella e non sposta niente.</li>' +

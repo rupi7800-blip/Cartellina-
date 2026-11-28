@@ -14,7 +14,7 @@ Apri il [sito](https://rupi7800-blip.github.io/Cartellina-/) e, dal menu del bro
 
 ## Cose da sapere
 - Cartellina **non è un dispositivo medico** e non sostituisce il parere del medico. In emergenza chiama il 112.
-- I dati (appuntamenti, documenti, email lette) sono salvati **solo sul telefono**; con il PIN sono cifrati. L'app non ha un server né account online.
+- I dati (appuntamenti, documenti, email lette) sono salvati **solo sul telefono**; con il PIN sono cifrati. L'app non ha un server né account online. Per sapere se c'è una versione nuova legge un piccolo file da questo sito: GitHub vede che l'app è aperta (indirizzo IP e orario), non i tuoi dati.
 - L'app installata dal browser e l'APK non condividono i dati: per passare dall'una all'altra usa *Impostazioni → Privacy e dati → Esporta / Importa*.
 
 Questo repository contiene solo i file pubblicati (sito e APK). Il codice sorgente non è qui.

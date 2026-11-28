@@ -247,7 +247,7 @@
   };
   function apribile() { try { return !!(nativa() && window.Capacitor.Plugins.ApriCartella); } catch (e) { return false; } }
   A.ACT.cartellaApri = async function () {
-    try { await window.Capacitor.Plugins.ApriCartella.apri({ cartella: 'Cartellina' }); }
+    try { await window.Capacitor.Plugins.ApriCartella.apri(); }
     catch (e) { A.toast('Non riesco ad aprirla da qui. Apri l\'app «File» del telefono, poi Documenti, poi «Cartellina».', 8000); }
   };
   A.ACT.cartellaSincronizza = async function () {

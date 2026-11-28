@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; worker-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://*.wikipedia.org https://clinicaltables.nlm.nih.gov https://overpass-api.de https://nominatim.openstreetmap.org https://api.anthropic.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; worker-src 'self' blob:; connect-src 'self' https://rupi7800-blip.github.io https://script.google.com https://script.googleusercontent.com https://*.wikipedia.org https://clinicaltables.nlm.nih.gov https://overpass-api.de https://nominatim.openstreetmap.org https://api.anthropic.com">
   <meta name="referrer" content="no-referrer">
   <title>Cartellina</title>
   <meta name="description" content="Cartellina: l'assistente per la burocrazia della salute. Email sanitarie, documenti, calendario, farmaci e promemoria.">
@@ -17,7 +17,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="css/style.css">
-  <script src="js/aggiornamenti.js" data-version="2.1.3"></script>
+  <!-- Se il repository pubblico cambia nome: aggiornare insieme l'host in connect-src (CSP sopra) e data-native-url / data-native-download qui sotto, e DIST_REPO nel workflow -->
+  <script src="js/aggiornamenti.js" data-version="2.1.4" data-native-url="https://rupi7800-blip.github.io/Cartellina-/version.json" data-native-download="https://github.com/rupi7800-blip/Cartellina-/releases/download/android-latest/Cartellina.apk"></script>
 </head>
 <body class="caricamento">
   <a class="skip" href="#view">Vai al contenuto</a>

@@ -1,9 +1,9 @@
 {
-  "version": "2.1.3",
+  "version": "2.1.4",
   "date": "28/11/2026",
   "notes": [
-    "App Android: la cartella Documenti/Cartellina si crea da sola e tiene una copia di dati e documenti (cifrata se c'è il PIN)",
-    "Ripristino di un profilo dalla cartella anche nell'app Android",
-    "Avvisi chiari se la cartella non si può creare o aggiornare"
+    "App Android: pulsante «Apri la cartella nei File» per raggiungere subito Documenti/Cartellina",
+    "L'avviso «Aggiornamento disponibile» compare anche nell'app Android e porta al download della versione nuova",
+    "App Android: la cartella Documenti/Cartellina si crea da sola e tiene una copia di dati e documenti"
   ]
 }

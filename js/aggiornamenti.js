@@ -15,6 +15,12 @@
   var BASE = me && me.src ? me.src.replace(/[^/]*$/, '') : './';
   // version.json sta nella cartella della pagina (non in quella dello script)
   var URL_V = new URL((me && me.dataset.versionUrl) || 'version.json', location.href.split('#')[0].split('?')[0]).href;
+  // nell'app Android la pagina è dentro l'APK: la versione nuova si legge dal sito pubblico e si aggiorna scaricando l'APK
+  var NATIVE = false;
+  try { NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) { /* no */ }
+  var DL = (NATIVE && me && me.dataset.nativeDownload) || '';
+  if (DL && me.dataset.nativeUrl) URL_V = me.dataset.nativeUrl;
+  var esito = '';   // dell'ultimo controllo: 'nuova' | 'aggiornata' | 'errore'
   var KEY = 'upd.dismissed.' + location.pathname;
   var latest = null, btn = null, shown = false;
 
@@ -62,7 +68,7 @@
     btn.className = 'upd-btn';
     btn.innerHTML = ICON + '<span>Aggiorna</span>';
     btn.title = 'Nuova versione ' + latest.version + ' disponibile';
-    btn.addEventListener('click', applyUpdate);
+    btn.addEventListener('click', DL ? scaricaApk : applyUpdate);
     var slot = document.querySelector('[data-update-slot]');
     if (slot) slot.appendChild(btn); else { btn.classList.add('upd-float'); document.body.appendChild(btn); }
   }
@@ -80,14 +86,15 @@
     card.setAttribute('role', 'alert');
     card.innerHTML = '<h4>' + ICON.replace('<svg', '<svg style="width:18px;height:18px;stroke:#ff7a52;fill:none;stroke-width:2.4"') +
       'Aggiornamento disponibile</h4><p>Versione ' + esc(latest.version) + (latest.date ? ' · ' + esc(latest.date) : '') + '</p>' +
+      (DL ? '<p>Scarica il file e installalo sopra a questa versione, senza disinstallarla: i tuoi dati restano sul telefono. Se Android rifiuta l\'installazione, non disinstallare: esporta prima i dati da Impostazioni.</p>' : '') +
       (notes.length ? '<ul>' + notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '') +
-      '<div class="upd-row"><button class="upd-later" type="button">Più tardi</button><button class="upd-go" type="button">Aggiorna ora</button></div>';
+      '<div class="upd-row"><button class="upd-later" type="button">Più tardi</button><button class="upd-go" type="button">' + (DL ? 'Scarica' : 'Aggiorna ora') + '</button></div>';
     document.body.appendChild(card);
     card.querySelector('.upd-later').onclick = function () {
       try { localStorage.setItem(KEY, latest.version); } catch (e) { /* no */ }
       card.remove();
     };
-    card.querySelector('.upd-go').onclick = applyUpdate;
+    card.querySelector('.upd-go').onclick = DL ? scaricaApk : applyUpdate;
   }
 
   function systemNotify() {
@@ -101,11 +108,13 @@
   }
 
   function check() {
-    if (!navigator.onLine) return Promise.resolve(false);
+    if (!navigator.onLine) { esito = 'errore'; return Promise.resolve(false); }
     return fetch(URL_V + '?t=' + Date.now(), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (v) {
-        if (!v || !v.version || cmp(v.version, CURRENT) <= 0) return false;
+        if (!v || !v.version) { esito = 'errore'; return false; }
+        if (cmp(v.version, CURRENT) <= 0) { esito = 'aggiornata'; return false; }
+        esito = 'nuova';
         var isNew = !latest || latest.version !== v.version;
         latest = v;
         showButton();
@@ -114,7 +123,14 @@
         document.dispatchEvent(new CustomEvent('app-update-available', { detail: v }));
         return true;
       })
-      .catch(function () { return false; });
+      .catch(function () { esito = 'errore'; return false; });
+  }
+
+  // app Android: apre il download dell'APK nel browser del telefono
+  function scaricaApk() {
+    var a = document.createElement('a');
+    a.href = DL; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
   function applyUpdate() {
@@ -156,7 +172,14 @@
     });
   }
 
-  window.AppUpdate = { check: check, apply: applyUpdate, current: CURRENT };
+  // riapre l'avviso su richiesta esplicita (anche dopo «Più tardi»)
+  function mostra() {
+    if (!latest) return;
+    try { localStorage.removeItem(KEY); } catch (e) { /* no */ }
+    var v = document.querySelector('.upd-card'); if (v) v.remove();
+    shown = false; showCard();
+  }
+  window.AppUpdate = { mostra: mostra, check: check, apply: DL ? scaricaApk : applyUpdate, current: CURRENT, esito: function () { return esito; } };
 
   function start() {
     setTimeout(check, 2500);
